@@ -1,0 +1,7 @@
+[
+  {"name": "急救", "if": {"self_hp_pct_lte": 55, "cooldown_ready": "bandage"}, "do": "bandage"},
+  {"name": "喝药", "if": {"resource_lte": 25, "charges_gte": ["potion", 1]}, "do": "potion"},
+  {"name": "凿击", "if": {"cooldown_ready": "gouge"}, "do": "gouge"},
+  {"name": "突刺", "if": {"cooldown_ready": "stab"}, "do": "stab"},
+  {"name": "填充", "if": {"always": true}, "do": "poke"}
+]

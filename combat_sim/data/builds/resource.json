@@ -1,0 +1,17 @@
+{
+  "name": "resource",
+  "label": "资源受限",
+  "max_hp": 2200,
+  "max_resource": 90,
+  "resource_regen": 6,
+  "crit_chance": 0.15,
+  "crit_mult": 1.5,
+  "haste": 0.10,
+  "abilities": [
+    {"name": "poke", "type": "damage", "damage": 150, "cost": 3},
+    {"name": "stab", "type": "damage", "damage": 430, "cost": 10, "cooldown": 4},
+    {"name": "gouge", "type": "damage", "damage": 950, "cost": 18, "cooldown": 10},
+    {"name": "bandage", "type": "heal", "heal": 850, "cost": 25, "cooldown": 8, "cast_time": 1.0},
+    {"name": "potion", "type": "restore", "restore": 60, "cost": 0, "cooldown": 30, "charges": 2}
+  ]
+}

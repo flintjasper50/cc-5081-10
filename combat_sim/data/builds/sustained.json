@@ -1,0 +1,17 @@
+{
+  "name": "sustained",
+  "label": "持续输出",
+  "max_hp": 2200,
+  "max_resource": 260,
+  "resource_regen": 16,
+  "crit_chance": 0.20,
+  "crit_mult": 1.6,
+  "haste": 0.25,
+  "abilities": [
+    {"name": "slash", "type": "damage", "damage": 260, "cost": 6},
+    {"name": "crush", "type": "damage", "damage": 700, "cost": 30, "cooldown": 8},
+    {"name": "rend", "type": "damage", "damage": 60, "cost": 20, "cooldown": 6,
+     "dot": {"damage": 70, "interval": 2, "duration": 12}},
+    {"name": "mend", "type": "heal", "heal": 950, "cost": 45, "cooldown": 8, "cast_time": 1.5}
+  ]
+}

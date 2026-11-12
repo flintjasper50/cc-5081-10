@@ -1,0 +1,13 @@
+{
+  "name": "训练场守卫·岩铠",
+  "max_hp": 20000,
+  "attack_interval": 2.0,
+  "damage": 190,
+  "damage_variance": 0.1,
+  "crit_chance": 0.08,
+  "crit_mult": 1.6,
+  "enrage_at": 150.0,
+  "enrage_damage_mult": 2.0,
+  "enrage_interval_mult": 0.5,
+  "time_limit": 240.0
+}

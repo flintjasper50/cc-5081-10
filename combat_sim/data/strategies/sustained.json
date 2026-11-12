@@ -1,0 +1,6 @@
+[
+  {"name": "急救", "if": {"self_hp_pct_lte": 55, "cooldown_ready": "mend"}, "do": "mend"},
+  {"name": "补流血", "if": {"cooldown_ready": "rend", "debuff_remaining_lte": ["rend", 2.0]}, "do": "rend"},
+  {"name": "压碎", "if": {"cooldown_ready": "crush"}, "do": "crush"},
+  {"name": "填充", "if": {"always": true}, "do": "slash"}
+]

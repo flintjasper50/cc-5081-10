@@ -1,0 +1,18 @@
+{
+  "name": "burst",
+  "label": "短时爆发",
+  "max_hp": 2200,
+  "max_resource": 220,
+  "resource_regen": 9,
+  "crit_chance": 0.30,
+  "crit_mult": 2.2,
+  "haste": 0.0,
+  "abilities": [
+    {"name": "slam", "type": "damage", "damage": 180, "cost": 6},
+    {"name": "lance", "type": "damage", "damage": 900, "cost": 35, "cooldown": 6, "cast_time": 1.2},
+    {"name": "obliterate", "type": "damage", "damage": 2200, "cost": 50, "cooldown": 12},
+    {"name": "surge", "type": "buff", "cost": 0, "cooldown": 60,
+     "buff": {"name": "surge", "damage_mult": 1.8, "duration": 12}},
+    {"name": "mend", "type": "heal", "heal": 950, "cost": 45, "cooldown": 8, "cast_time": 1.5}
+  ]
+}
