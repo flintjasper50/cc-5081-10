@@ -1,0 +1,36 @@
+{
+  "name": "baseline",
+  "label": "基准回归场景",
+  "purpose": "内置三构筑都能稳定击杀的训练场基线，仅用于回归确定性与统计口径自检，不用于能力排名。",
+  "kind": "batch",
+  "enemy": {
+    "name": "训练场守卫·岩铠",
+    "max_hp": 20000,
+    "attack_interval": 2.0,
+    "damage": 190,
+    "damage_variance": 0.1,
+    "crit_chance": 0.08,
+    "crit_mult": 1.6,
+    "enrage_at": 150.0,
+    "enrage_damage_mult": 2.0,
+    "enrage_interval_mult": 0.5,
+    "time_limit": 240.0
+  },
+  "runs": 60,
+  "seed": 1,
+  "builds": ["burst", "resource", "sustained"],
+  "requirements": {
+    "min_completed": 60,
+    "min_win_rate": 0.95,
+    "max_timeouts": null,
+    "max_aborted": 0,
+    "max_stopped": 0
+  },
+  "rewards": {
+    "win_base": 100.0,
+    "per_remaining_second": 0.3,
+    "per_damage_hundred": 0.05,
+    "hp_remaining_pct": 0.3
+  },
+  "notes": "基线场景三构筑胜率相同，速度差异才是有意义的比较；资源受限时间≈0 说明本场景不构成资源约束，不能代表资源能力。"
+}

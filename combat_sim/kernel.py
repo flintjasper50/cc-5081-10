@@ -1,11 +1,15 @@
 """规则内核：批量运行与单场播放共用同一套模拟逻辑。
 
 固定 dt 推进时间，真正执行：攻击判定、冷却、读条、GCD、资源扣减/回复、
-DoT 跳伤、增益、敌方攻击、狂暴与时限。结局四态：
+DoT 跳伤、增益、敌方攻击、狂暴与时限。结局五态，分为两类：
+
+完整结束（计入完整样本分母）:
   VICTORY  击杀目标（唯一成功）
   DEFEAT   玩家死亡（有效失败）
   TIMEOUT  超过场景时限（有效失败）
-  ABORTED  异常中断：步数上限、非法策略/配置等（单独统计，绝不算成功）
+未完整结束（单独统计，绝不计入成功率或指标均值）:
+  ABORTED  模拟失败：步数上限、非法策略/配置、运行异常
+  STOPPED  主动停止：调用方（界面/脚本）要求提前结束，不是模拟失败
 """
 
 from dataclasses import dataclass
@@ -21,7 +25,13 @@ class Outcome(str, Enum):
     VICTORY = "victory"
     DEFEAT = "defeat"
     TIMEOUT = "timeout"
-    ABORTED = "aborted"
+    ABORTED = "aborted"   # 模拟失败（异常/配置错误/步数上限）
+    STOPPED = "stopped"   # 主动停止（调用方提前结束）
+
+    @property
+    def completed(self):
+        """是否属于完整结束样本：只有这类才进入成功率分母。"""
+        return self in (Outcome.VICTORY, Outcome.DEFEAT, Outcome.TIMEOUT)
 
 
 @dataclass
@@ -34,15 +44,20 @@ class RunResult:
     counters: dict
     trace: list | None
     error: str | None = None
+    stop_reason: str | None = None
+    scenario: str | None = None
 
 
 class Kernel:
-    def __init__(self, build, enemy, rules, seed, dt=0.1, trace=False, max_steps=None):
+    def __init__(self, build, enemy, rules, seed, dt=0.1, trace=False, max_steps=None,
+                 scenario=None, should_stop=None):
         self.build = build
         self.enemy = enemy
         self.rules = list(rules)
         self.dt = dt
         self.max_steps = max_steps or int(enemy.time_limit / dt) * 2 + 100
+        self.scenario = scenario
+        self._should_stop = should_stop
 
         self.t = 0.0
         self.steps = 0
@@ -71,7 +86,7 @@ class Kernel:
             "resource_spent": 0.0, "starved_events": 0, "starved_time": 0.0,
             "potions_used": 0, "min_resource": build.max_resource,
         }
-        self._last_starved = (None, -10.0)
+        self._decisions = 0
 
     # ---------- 主循环 ----------
 
@@ -80,6 +95,8 @@ class Kernel:
             while True:
                 if self.steps >= self.max_steps:
                     return self._finish(Outcome.ABORTED, f"超过步数上限 {self.max_steps}，模拟未能终结")
+                if self._should_stop is not None and self._should_stop(self):
+                    return self._finish(Outcome.STOPPED, stop_reason="主动停止")
                 self._tick()
                 if self.enemy_hp <= 0:
                     return self._finish(Outcome.VICTORY)
@@ -90,20 +107,27 @@ class Kernel:
         except Exception as exc:
             return self._finish(Outcome.ABORTED, f"{type(exc).__name__}: {exc}")
 
-    def _finish(self, outcome, error=None):
+    def _finish(self, outcome, error=None, stop_reason=None):
         kill_time = self.t if outcome is Outcome.VICTORY else None
-        self._emit(outcome.value, error=error)
+        self.counters["final_hp"] = max(0.0, self.hp)
+        self.counters["final_enemy_hp"] = max(0.0, self.enemy_hp)
+        self._emit(outcome.value, outcome=outcome.value, error=error, reason=stop_reason,
+                   hp=max(0.0, self.hp), enemy_hp=max(0.0, self.enemy_hp))
         return RunResult(
             build=self.build.name, seed=self.rng.seed, outcome=outcome,
             time=self.t, kill_time=kill_time, counters=self.counters,
-            trace=self.trace_log, error=error,
+            trace=self.trace_log, error=error, stop_reason=stop_reason,
+            scenario=self.scenario,
         )
 
     def _tick(self):
         t, dt = self.t, self.dt
         self.resource = min(self.build.max_resource,
                             self.resource + self.build.resource_regen * dt)
+        new_min = self.resource < self.counters["min_resource"] - EPS
         self.counters["min_resource"] = min(self.counters["min_resource"], self.resource)
+        if new_min:
+            self._emit("resource_min", resource=self.resource)
 
         if self.buffs:
             self.buffs = [b for b in self.buffs if b["expires"] - t > EPS]
@@ -146,7 +170,8 @@ class Kernel:
     # ---------- 决策（条件触发动作） ----------
 
     def _decide(self):
-        blocked = False
+        blocked = 0
+        first_blocked = None
         for rule in self.rules:
             if not self._match(rule.cond):
                 continue
@@ -156,17 +181,16 @@ class Kernel:
             if ab.charges is not None and self.charges.get(ab.name, 0) <= 0:
                 continue
             if self.resource + EPS < ab.cost:
-                blocked = True
-                self.counters["starved_events"] += 1
-                last_name, last_t = self._last_starved
-                if ab.name != last_name or self.t - last_t > 1.0:
-                    self._emit("starved", ability=ab.name, resource=self.resource)
-                    self._last_starved = (ab.name, self.t)
+                blocked += 1
+                first_blocked = first_blocked or ab
                 continue
             self._start(ab)
             break
         if blocked:
+            self.counters["starved_events"] += blocked
             self.counters["starved_time"] += self.dt
+            self._emit("starved_interval", events=blocked, duration=self.dt,
+                       ability=first_blocked.name, resource=self.resource)
 
     def _match(self, cond):
         for key, v in cond.items():
@@ -210,10 +234,13 @@ class Kernel:
     def _start(self, ab):
         self.resource -= ab.cost
         self.counters["resource_spent"] += ab.cost
+        if ab.cost:
+            self._emit("spend", ability=ab.name, cost=ab.cost, resource=self.resource)
         if ab.charges is not None:
             self.charges[ab.name] -= 1
         if ab.type == "restore":
             self.counters["potions_used"] += 1
+            self._emit("potion_used", ability=ab.name)
         self.cooldowns[ab.name] = ab.cooldown
         self.counters["casts_by_ability"][ab.name] = \
             self.counters["casts_by_ability"].get(ab.name, 0) + 1
@@ -275,7 +302,8 @@ class Kernel:
             c["hits"] += 1
             if crit:
                 c["crits"] += 1
-        self._emit("damage", ability=tag, amount=amount, crit=crit, enemy_hp=self.enemy_hp)
+        self._emit("damage", ability=tag, amount=amount, crit=crit, counts_hit=can_crit,
+                   enemy_hp=self.enemy_hp)
 
     def _enemy_attack(self):
         e = self.enemy

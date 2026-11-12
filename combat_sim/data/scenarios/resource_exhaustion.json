@@ -1,0 +1,36 @@
+{
+  "name": "resource_exhaustion",
+  "label": "持续输出·资源耗尽",
+  "purpose": "目标血量高、攻击温和，考的是资源回复与消耗的长期平衡，而非爆发速度；能把资源受限时间拉长。",
+  "kind": "batch",
+  "enemy": {
+    "name": "耗损木桩·蓄甲",
+    "max_hp": 65000,
+    "attack_interval": 3.0,
+    "damage": 70,
+    "damage_variance": 0.1,
+    "crit_chance": 0.0,
+    "crit_mult": 1.5,
+    "enrage_at": null,
+    "enrage_damage_mult": 2.0,
+    "enrage_interval_mult": 0.5,
+    "time_limit": 180.0
+  },
+  "runs": 60,
+  "seed": 1,
+  "builds": ["burst", "resource", "sustained"],
+  "requirements": {
+    "min_completed": 60,
+    "min_win_rate": 0.0,
+    "max_timeouts": null,
+    "max_aborted": 0,
+    "max_stopped": 0
+  },
+  "rewards": {
+    "win_base": 100.0,
+    "per_remaining_second": 0.4,
+    "per_damage_hundred": 0.08,
+    "hp_remaining_pct": 0.3
+  },
+  "notes": "资源受限时间与耗资源事件是本场景的核心证据；超时(timeout)属于有效失败，不是异常，需与模拟失败分开统计。"
+}

@@ -1,9 +1,11 @@
 import unittest
 
+from combat_sim import model, reference
 from combat_sim.kernel import Kernel, Outcome
 from combat_sim.model import Ability, Build, Enemy, Rule, load_all, DATA_DIR
-from combat_sim.runner import run_single, run_batch
-from combat_sim.stats import summarize
+from combat_sim.runner import run_single, run_batch, run_scenario, verify_event_totals
+from combat_sim.stats import summarize, scenario_warnings
+from combat_sim.gui_support import build_payload
 
 
 def make_build(**kw):
@@ -42,7 +44,9 @@ class TestEmptyActionSet(unittest.TestCase):
         st = summarize(batch.results["t"])
         self.assertEqual(st["wins"], 0)
         self.assertEqual(st["win_rate"], 0.0)
-        self.assertEqual(st["defeats"] + st["timeouts"] + st["aborted"], 5)
+        self.assertEqual(st["defeats"] + st["timeouts"], 5)
+        self.assertEqual(st["n_completed"], 5)
+        self.assertEqual(st["aborted"], 0)
 
 
 class TestUnbeatableTarget(unittest.TestCase):
@@ -117,7 +121,10 @@ class TestUnfinishedNotSuccess(unittest.TestCase):
         st = summarize([res])
         self.assertEqual(st["wins"], 0)
         self.assertEqual(st["aborted"], 1)
-        self.assertEqual(st["win_rate"], 0.0)
+        self.assertEqual(st["n_completed"], 0)
+        # 没有完整结束样本：成功率不可计算（None），不能显示 0% 误导读者
+        self.assertIsNone(st["win_rate"])
+        self.assertIsNone(st["kill_mean"])
 
     def test_invalid_strategy_is_aborted_not_defeat(self):
         bad = [Rule("坏规则", {"nonexistent_condition": 1}, "hit")]
@@ -168,3 +175,194 @@ class TestShippedData(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDenominatorHonesty(unittest.TestCase):
+    """分母口径：成功率只用完整结束样本；异常与主动停止绝不混入。"""
+
+    def test_aborted_excluded_from_denominator(self):
+        build, enemy = make_build(), make_enemy()
+        rules = [Rule("坏", {"no_such": 1}, "hit")]
+        rs = [run_single(build, enemy, rules, seed=i) for i in range(3)]
+        st = summarize(rs)
+        self.assertEqual(st["n_completed"], 0)
+        self.assertEqual(st["aborted"], 3)
+        self.assertIsNone(st["win_rate"])
+
+    def test_one_aborted_does_not_drag_win_rate(self):
+        build, enemy = make_build(), make_enemy(max_hp=300)
+        good = run_single(build, enemy, HIT_RULE, seed=1)
+        self.assertEqual(good.outcome, Outcome.VICTORY)
+        bad = Kernel(build, enemy, HIT_RULE, seed=2, max_steps=1).run()
+        st = summarize([good, bad])
+        self.assertEqual(st["n"], 2)
+        self.assertEqual(st["n_completed"], 1)
+        self.assertEqual(st["aborted"], 1)
+        self.assertEqual(st["win_rate"], 1.0)  # 分母 1，不是 2
+
+    def test_stopped_not_counted_as_failure(self):
+        build, enemy = make_build(), make_enemy(max_hp=1e9, damage=1, time_limit=100.0)
+        res = run_single(build, enemy, HIT_RULE, seed=1,
+                         should_stop=lambda k: k.t >= 2.0)
+        self.assertEqual(res.outcome, Outcome.STOPPED)
+        self.assertEqual(res.stop_reason, "主动停止")
+        self.assertFalse(res.outcome.completed)
+        st = summarize([res])
+        self.assertEqual(st["stopped"], 1)
+        self.assertEqual(st["aborted"], 0)
+        self.assertIsNone(st["win_rate"])
+
+    def test_single_win_has_no_p90_or_stdev(self):
+        build, enemy = make_build(), make_enemy(max_hp=300)
+        st = summarize([run_single(build, enemy, HIT_RULE, seed=1)])
+        self.assertEqual(st["wins"], 1)
+        self.assertIsNone(st["kill_p90"])
+        self.assertIsNone(st["kill_stdev"])
+
+
+class TestScenarioConstraints(unittest.TestCase):
+    """场景约束与警示：无胜利、零方差、无完整样本都要显式提示。"""
+
+    def test_zero_win_scenario_warns(self):
+        st = summarize([run_single(make_build(), make_enemy(max_hp=1e9, damage=1),
+                                   HIT_RULE, seed=1)])
+        errs, warns = scenario_warnings(st)
+        self.assertFalse(errs)
+        self.assertTrue(any("没有胜利" in w for w in warns))
+
+    def test_zero_variance_warns(self):
+        build, enemy = make_build(), make_enemy(max_hp=300)
+        rs = [run_single(build, enemy, [Rule("打", {"always": True}, "hit")], seed=1)
+              for _ in range(3)]
+        st = summarize(rs)
+        self.assertEqual(st["kill_stdev"], 0.0)
+        _, warns = scenario_warnings(st)
+        self.assertTrue(any("零方差" in w for w in warns))
+
+    def test_shipped_scenarios_are_constraint_clean(self):
+        scenarios = model.load_scenarios()
+        for name in reference.REFERENCE_SCENARIOS:
+            sc = scenarios[name]
+            batch, _, _ = run_scenario(sc, runs=min(sc.runs, 12))
+            for build in batch.order:
+                st = summarize(batch.results[build])
+                errs, _ = scenario_warnings(st, wins_required=1)
+                self.assertEqual(errs, [], f"{name}/{build} 出现口径错误: {errs}")
+
+
+class TestScenarioDataConsistency(unittest.TestCase):
+    """场景引用的构筑与策略必须存在，且配置可解析。"""
+
+    def test_all_scenarios_reference_existing_builds(self):
+        scenarios = model.load_scenarios()
+        for name, sc in scenarios.items():
+            _, specs = model.load_all(None, list(sc.builds))
+            self.assertEqual(sorted(b.name for b, _ in specs), sorted(sc.builds))
+
+    def test_empty_example_is_runnable_and_uncomputable(self):
+        ex = DATA_DIR.parent.parent / "examples" / "empty_no_valid"
+        sc = model.load_scenario_by_name("no_valid_samples", ex)
+        batch, meta, _ = run_scenario(sc, data_dir=ex)
+        st = summarize(batch.results["noop"])
+        self.assertEqual(st["n_completed"], 0)
+        self.assertEqual(st["aborted"], sc.runs)
+        self.assertIsNone(st["win_rate"])
+        self.assertIsNone(st["kill_mean"])
+
+
+class TestEventReconciliation(unittest.TestCase):
+    """事件流与统计记录必须逐项一致；图形界面的核对结果必须为通过。"""
+
+    def test_events_reconcile_with_counters(self):
+        enemy, specs = load_all()
+        build, rules = specs[0]
+        res = run_single(build, enemy, rules, seed=3, trace=True)
+        ev = verify_event_totals(res)
+        self.assertTrue(ev["matches"], ev["checks"])
+
+    def test_starved_events_reconcile(self):
+        build = make_build(max_resource=50, resource_regen=0,
+                           abilities=[Ability(name="big", type="damage", damage=10, cost=100)])
+        res = run_single(build, make_enemy(time_limit=5.0),
+                         [Rule("大", {"always": True}, "big")], seed=1, trace=True)
+        ev = verify_event_totals(res)
+        self.assertTrue(ev["matches"], ev["checks"])
+        self.assertGreater(res.counters["starved_events"], 0)
+
+    def test_gui_payload_reconciles(self):
+        sc = model.load_scenario_by_name("battle_practice")
+        for build_name in sc.builds:
+            payload = build_payload(build_name, 5, sc)
+            self.assertTrue(payload["reconciled"], payload["mismatch"])
+            self.assertEqual(payload["stats"]["outcome"], "victory")
+            self.assertIsNotNone(payload["reward"]["total"])
+
+    def test_gui_reports_aborted_as_error(self):
+        # 配置错误的构筑在图形入口必须提示异常，而不是静默展示收益
+        sc = model.load_scenario_by_name("no_valid_samples",
+                                         DATA_DIR.parent.parent / "examples" / "empty_no_valid")
+        payload = build_payload("noop", 1, sc,
+                                DATA_DIR.parent.parent / "examples" / "empty_no_valid")
+        self.assertEqual(payload["stats"]["outcome"], "aborted")
+        self.assertIsNone(payload["reward"]["total"])
+
+
+class TestReferenceRoundTrip(unittest.TestCase):
+    """参考批次：清洁生成 → 复核通过；篡改后复核必须失败。"""
+
+    def test_generate_and_verify(self):
+        import tempfile, json, shutil, os
+        with tempfile.TemporaryDirectory() as td:
+            rc = reference.build_reference(td)
+            self.assertEqual(rc, 0)
+            self.assertEqual(reference.verify_reference(td), 0)
+
+            doc_path = os.path.join(td, "baseline.json")
+            doc = json.load(open(doc_path, encoding="utf-8"))
+            doc["records"]["burst"][0]["counters"]["damage_total"] += 100
+            json.dump(doc, open(doc_path, "w", encoding="utf-8"), ensure_ascii=False)
+            self.assertEqual(reference.verify_reference(td), 1)
+
+            doc_path = os.path.join(td, "baseline.json")
+            doc = json.load(open(doc_path, encoding="utf-8"))
+            doc["records"]["burst"][0]["counters"]["damage_total"] += 100
+            json.dump(doc, open(doc_path, "w", encoding="utf-8"), ensure_ascii=False)
+            self.assertEqual(reference.verify_reference(td), 1)
+
+
+class TestDocsMatchCode(unittest.TestCase):
+    """开发文档里的可核对数字必须与当前代码一致，防止文档过期。"""
+
+    def _readme(self):
+        from pathlib import Path
+        return (Path(__file__).resolve().parent.parent / "README.md").read_text(
+            encoding="utf-8")
+
+    def test_readme_replay_numbers_match_gui(self):
+        txt = self._readme()
+        sc = model.load_scenario_by_name("battle_practice")
+        payload = build_payload("burst", 1, sc)
+        expected = [
+            "20767.6", "6/12", "1340.0", "1810.0", "302.8",
+            "9187.2", "10813",
+        ]
+        for tok in expected:
+            self.assertIn(tok, txt, f"README 缺少或已过期的数字: {tok}")
+        self.assertEqual(payload["events"][0]["text"], "施放 surge")
+
+    def test_readme_scenario_names_exist(self):
+        txt = self._readme()
+        for name in ("baseline", "survival_pressure", "resource_exhaustion",
+                     "battle_practice", "no_valid_samples", "partial_not_satisfied"):
+            self.assertIn(name, txt)
+        for name in reference.REFERENCE_SCENARIOS:
+            self.assertIn(name, model.load_scenarios())
+
+    def test_readme_commands_resolve(self):
+        """文档列出的关键子命令必须存在。"""
+        import inspect
+        from combat_sim import cli
+        source = inspect.getsource(cli.main)
+        for sub in ("batch", "play", "scenarios", "reference", "verify", "show-runs",
+                    "check", "constraint-check", "gui", "list"):
+            self.assertIn(f'"{sub}"', source, f"CLI 缺少文档声明的子命令 {sub}")

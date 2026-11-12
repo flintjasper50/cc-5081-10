@@ -1,0 +1,13 @@
+{
+  "name": "noop",
+  "label": "无有效样本示例",
+  "max_hp": 2200,
+  "max_resource": 100,
+  "resource_regen": 10,
+  "crit_chance": 0.2,
+  "crit_mult": 1.6,
+  "haste": 0.0,
+  "abilities": [
+    {"name": "test_swing", "type": "damage", "damage": 200, "cost": 5}
+  ]
+}

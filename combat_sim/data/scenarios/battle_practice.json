@@ -1,0 +1,36 @@
+{
+  "name": "battle_practice",
+  "label": "战斗演练场（构筑演练）",
+  "purpose": "构筑演练的图形入口默认场景：选择构筑、播放单场，核对画面事件与实际收益统计是否一致。命令行只做辅助与批量复核。",
+  "kind": "battle_practice",
+  "enemy": {
+    "name": "训练场守卫·岩铠",
+    "max_hp": 20000,
+    "attack_interval": 2.0,
+    "damage": 190,
+    "damage_variance": 0.1,
+    "crit_chance": 0.08,
+    "crit_mult": 1.6,
+    "enrage_at": 150.0,
+    "enrage_damage_mult": 2.0,
+    "enrage_interval_mult": 0.5,
+    "time_limit": 240.0
+  },
+  "runs": 1,
+  "seed": 1,
+  "builds": ["burst", "resource", "sustained"],
+  "requirements": {
+    "min_completed": 0,
+    "min_win_rate": 0.0,
+    "max_timeouts": null,
+    "max_aborted": 0,
+    "max_stopped": 0
+  },
+  "rewards": {
+    "win_base": 100.0,
+    "per_remaining_second": 0.3,
+    "per_damage_hundred": 0.05,
+    "hp_remaining_pct": 0.3
+  },
+  "notes": "单场演练的收益由 rewards.compute_reward 现场结算；战斗过程事件与统计不一致时界面直接提示异常。"
+}

@@ -1,0 +1,7 @@
+[
+  {"name": "急救", "if": {"self_hp_pct_lte": 50, "cooldown_ready": "mend"}, "do": "mend"},
+  {"name": "爆发窗口", "if": {"cooldown_ready": "surge"}, "do": "surge"},
+  {"name": "湮灭", "if": {"cooldown_ready": "obliterate"}, "do": "obliterate"},
+  {"name": "长矛", "if": {"cooldown_ready": "lance"}, "do": "lance"},
+  {"name": "填充", "if": {"always": true}, "do": "slam"}
+]

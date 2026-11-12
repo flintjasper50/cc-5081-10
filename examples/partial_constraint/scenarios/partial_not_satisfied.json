@@ -1,0 +1,29 @@
+{
+  "name": "partial_not_satisfied",
+  "label": "部分构筑不满足场景约束（生存压力）",
+  "kind": "batch",
+  "enemy": {
+    "name": "重压守卫·裂甲",
+    "max_hp": 16000,
+    "attack_interval": 1.8,
+    "damage": 260,
+    "damage_variance": 0.12,
+    "crit_chance": 0.1,
+    "crit_mult": 1.6,
+    "enrage_at": 110.0,
+    "enrage_damage_mult": 1.8,
+    "enrage_interval_mult": 0.6,
+    "time_limit": 150.0
+  },
+  "runs": 20,
+  "seed": 1,
+  "builds": ["burst", "resource", "sustained"],
+  "requirements": {
+    "min_completed": 20,
+    "min_win_rate": 0.95,
+    "max_timeouts": 0,
+    "max_aborted": 0,
+    "max_stopped": 0
+  },
+  "notes": "constraint_check 会用这些阈值复核：短时爆发接近阈值，资源受限/持续输出明显不达标，但它是有效失败子集（defeat），不是模拟失败。"
+}

@@ -1,0 +1,36 @@
+{
+  "name": "no_valid_samples",
+  "label": "无有效样本（配置错误）",
+  "purpose": "策略引用了未知条件，每场都在开打前记为 ABORTED（模拟失败）。没有任何完整结束样本时，成功率与击杀时间必须为 None，脚本文档不得显示 0%。",
+  "kind": "batch",
+  "enemy": {
+    "name": "无威胁木桩",
+    "max_hp": 12000,
+    "attack_interval": 3.0,
+    "damage": 30,
+    "damage_variance": 0.1,
+    "crit_chance": 0.0,
+    "crit_mult": 1.5,
+    "enrage_at": null,
+    "enrage_damage_mult": 2.0,
+    "enrage_interval_mult": 0.5,
+    "time_limit": 12.0
+  },
+  "runs": 6,
+  "seed": 1,
+  "builds": ["noop"],
+  "requirements": {
+    "min_completed": 0,
+    "min_win_rate": 0.0,
+    "max_timeouts": null,
+    "max_aborted": null,
+    "max_stopped": 0
+  },
+  "rewards": {
+    "win_base": 0.0,
+    "per_remaining_second": 0.0,
+    "per_damage_hundred": 0.0,
+    "hp_remaining_pct": 0.0
+  },
+  "notes": "示例把 max_aborted 设为 null，验证脚本不会阻止这组演示；正常场景应保持 max_aborted=0 并要求修复配置。"
+}
